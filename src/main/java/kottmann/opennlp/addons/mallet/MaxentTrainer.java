@@ -39,7 +39,7 @@ public class MaxentTrainer extends AbstractEventTrainer {
 
   public MaxentTrainer(Map<String, String> trainParams,
       Map<String, String> reportMap) {
-    super(trainParams, reportMap);
+    super();
   }
 
   @Override

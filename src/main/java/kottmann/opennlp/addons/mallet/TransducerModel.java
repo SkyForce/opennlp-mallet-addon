@@ -50,7 +50,74 @@ public class TransducerModel<T> implements SequenceClassificationModel<T>, Seria
   public opennlp.tools.util.Sequence bestSequence(T[] sequence,
       Object[] additionalContext, BeamSearchContextGenerator<T> cg,
       SequenceValidator<T> validator) {
+
+    if(sequence.length == 0) {
+      return new opennlp.tools.util.Sequence();
+    }
     return bestSequences(1, sequence, additionalContext, cg, validator)[0];
+  }
+
+  @Override
+  public opennlp.tools.util.Sequence[] bestSequences(int numSequences,
+                                                     T[] sequence, Object[] additionalContext, double v, BeamSearchContextGenerator<T> cg, SequenceValidator<T> validator) {
+    // TODO: CRF.getInputAlphabet
+    Alphabet dataAlphabet = model.getInputPipe().getAlphabet();
+
+    FeatureVector featureVectors[] = new FeatureVector[sequence.length];
+
+    // TODO:: The feature generator needs to get the detected sequence in the end
+    // to update the adaptive data!
+    String prior[] = new String[sequence.length];
+    Arrays.fill(prior, "NOUN"); // <- HACK, this will degrade performance!
+
+    // TODO: Put together a feature generator which doesn't fail if outcomes is null!
+    for (int i = 0; i < sequence.length; i++) {
+      String features[] = cg.getContext(i, sequence, null, additionalContext);
+
+      List<Integer> malletFeatureList = new ArrayList<>(features.length);
+
+      for (int featureIndex = 0; featureIndex < features.length; featureIndex++) {
+        if (dataAlphabet.contains(features[featureIndex])) {
+          malletFeatureList.add(dataAlphabet.lookupIndex(features[featureIndex]));
+        }
+      }
+
+      int malletFeatures[] = new int[malletFeatureList.size()];
+      for (int k = 0; k < malletFeatureList.size(); k++) {
+        malletFeatures[k] = malletFeatureList.get(k);
+      }
+
+      // Note: Might contain a feature more than once ... will that work ?!
+      featureVectors[i] = new FeatureVector(dataAlphabet, malletFeatures);
+    }
+
+    FeatureVectorSequence malletSequence = new FeatureVectorSequence(featureVectors);
+
+    Sequence[] answers = null;
+    if (numSequences == 1) {
+      answers = new Sequence[1];
+      answers[0] = model.transduce(malletSequence);
+    } else {
+      MaxLatticeDefault lattice = new MaxLatticeDefault(model, malletSequence, null, 3);
+
+      answers = lattice.bestOutputSequences(numSequences).toArray(new Sequence[0]);
+    }
+
+    opennlp.tools.util.Sequence[] outcomeSequences = new opennlp.tools.util.Sequence[answers.length];
+
+    for (int i = 0; i < answers.length; i++) {
+      Sequence seq = answers[i];
+
+      List<String> outcomes = new ArrayList<>(seq.size());
+
+      for (int j = 0; j < seq.size(); j++) {
+        outcomes.add(seq.get(j).toString());
+      }
+
+      outcomeSequences[i] = new opennlp.tools.util.Sequence(outcomes);
+    }
+
+    return outcomeSequences;
   }
 
   public opennlp.tools.util.Sequence[] bestSequences(int numSequences,
@@ -65,11 +132,11 @@ public class TransducerModel<T> implements SequenceClassificationModel<T>, Seria
     // TODO:: The feature generator needs to get the detected sequence in the end
     // to update the adaptive data!
     String prior[] = new String[sequence.length];
-    Arrays.fill(prior, "s"); // <- HACK, this will degrade performance!
+    Arrays.fill(prior, "VERB"); // <- HACK, this will degrade performance!
     
     // TODO: Put together a feature generator which doesn't fail if outcomes is null!
     for (int i = 0; i < sequence.length; i++) {
-      String features[] = cg.getContext(i, sequence, null, additionalContext);
+      String features[] = cg.getContext(i, sequence, prior, additionalContext);
       
       List<Integer> malletFeatureList = new ArrayList<>(features.length);
       
@@ -115,6 +182,11 @@ public class TransducerModel<T> implements SequenceClassificationModel<T>, Seria
     }
     
     return outcomeSequences;
+  }
+
+  @Override
+  public String[] getOutcomes() {
+    return new String[0];
   }
 
   @Override

@@ -20,6 +20,7 @@
 package kottmann.opennlp.addons.mallet;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -45,9 +46,12 @@ import cc.mallet.types.LabelSequence;
 // Dummy feature generator ?!
 public class CRFTrainer extends AbstractSequenceTrainer {
 
-  public CRFTrainer(Map<String, String> trainParams,
-      Map<String, String> reportMap) {
-    super(trainParams, reportMap);
+  public CRFTrainer() {
+    Map<String, String> mp = new HashMap<>();
+    mp.put(ALGORITHM_PARAM, "kottmann.opennlp.addons.mallet.CRFTrainer");
+    mp.put(CUTOFF_PARAM, "0");
+    mp.put(ITERATIONS_PARAM, "100");
+    this.init(mp, null);
   }
 
   private int[] getOrders() {
@@ -71,7 +75,8 @@ public class CRFTrainer extends AbstractSequenceTrainer {
     InstanceList trainingData = new InstanceList(dataAlphabet, targetAlphabet);
 
     int nameIndex = 0;
-    for (Sequence sequence : sequences) {
+    Sequence sequence;
+    while((sequence = sequences.read()) != null) {
       FeatureVector featureVectors[] = new FeatureVector[sequence.getEvents().length];
       Label malletOutcomes[] = new Label[sequence.getEvents().length];
 
@@ -98,13 +103,15 @@ public class CRFTrainer extends AbstractSequenceTrainer {
             event.getOutcome(), true);
       }
 
-      LabelSequence malletOutcomeSequence = new LabelSequence(malletOutcomes);
+      if(malletOutcomes.length != 0) {
+        LabelSequence malletOutcomeSequence = new LabelSequence(malletOutcomes);
 
-      FeatureVectorSequence malletSequence = new FeatureVectorSequence(
-          featureVectors);
+        FeatureVectorSequence malletSequence = new FeatureVectorSequence(
+                featureVectors);
 
-      trainingData.add(new Instance(malletSequence, malletOutcomeSequence,
-          "name" + nameIndex++, "source"));
+        trainingData.add(new Instance(malletSequence, malletOutcomeSequence,
+                "name" + nameIndex++, "source"));
+      }
     }
 
     CRF crf = new CRF(trainingData.getDataAlphabet(),
@@ -147,12 +154,12 @@ public class CRFTrainer extends AbstractSequenceTrainer {
 
     // SNIP
 
-    crfTrainer.train(trainingData, Integer.MAX_VALUE);
+    crfTrainer.train(trainingData, 20);
 
     // can be very similar to the other model
     // one important difference is that the feature gen needs to be integrated
     // ...
-    return new TransducerModel(crf);
+    return new TransducerModel(crfTrainer.getCRF());
   }
 
   // TODO: We need to return a sequence model here. How should that be done ?!
